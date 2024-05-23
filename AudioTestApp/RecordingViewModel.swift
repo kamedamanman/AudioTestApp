@@ -1,13 +1,16 @@
 import AVFoundation
 import Foundation
 
-class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudioPlayerDelegate {
+class RecordingViewModel: NSObject, ObservableObject {
     @Published var recordings: [URL] = []
     @Published var isRecording = false
     @Published var currentlyPlaying: URL?
 
     var audioRecorder: AVAudioRecorder?
     var audioPlayer: AVAudioPlayer?
+    var audioEngine: AVAudioEngine?
+    var inputNode: AVAudioInputNode?
+    var mixerNode: AVAudioMixerNode?
 
     func requestMicrophonePermission() {
         AVAudioApplication.requestRecordPermission { granted in
@@ -30,7 +33,7 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
         let audioSession = AVAudioSession.sharedInstance()
 
         do {
-            try audioSession.setCategory(.playAndRecord, mode: .default)
+            try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try audioSession.setActive(true)
 
             let settings: [String: Any] = [
@@ -45,15 +48,17 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
             audioRecorder?.delegate = self
             audioRecorder?.record()
 
+            startMonitoring()
+
             isRecording = true
         } catch {
-            // 録音開始に失敗した場合のエラーハンドリング
             print("録音開始に失敗しました: \(error.localizedDescription)")
         }
     }
 
     func stopRecording() {
         audioRecorder?.stop()
+        stopMonitoring()
         isRecording = false
         loadRecordings()
     }
@@ -72,7 +77,6 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
             let files = try fileManager.contentsOfDirectory(at: documentsDirectory, includingPropertiesForKeys: nil)
             recordings = files.filter { $0.pathExtension == "m4a" }
         } catch {
-            // ファイルの読み込みに失敗した場合のエラーハンドリング
             print("ファイルの読み込みに失敗しました: \(error.localizedDescription)")
         }
     }
@@ -92,7 +96,6 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
             audioPlayer?.play()
             currentlyPlaying = recording
         } catch {
-            // 再生に失敗した場合のエラーハンドリング
             print("再生に失敗しました: \(error.localizedDescription)")
         }
     }
@@ -123,10 +126,42 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
                 }
                 try fileManager.removeItem(at: recording)
             } catch {
-                // 録音の削除に失敗した場合のエラーハンドリング
                 print("録音の削除に失敗しました: \(error.localizedDescription)")
             }
         }
         loadRecordings()
     }
+
+    func startMonitoring() {
+        audioEngine = AVAudioEngine()
+        inputNode = audioEngine?.inputNode
+        mixerNode = AVAudioMixerNode()
+
+        guard let inputNode, let audioEngine, let mixerNode else { return }
+
+        let format = inputNode.inputFormat(forBus: 0)
+        audioEngine.attach(mixerNode)
+        audioEngine.connect(inputNode, to: mixerNode, format: format)
+        audioEngine.connect(mixerNode, to: audioEngine.mainMixerNode, format: format)
+
+        mixerNode.volume = 1.0
+
+        do {
+            try audioEngine.start()
+        } catch {
+            print("オーディオエンジンの開始に失敗しました: \(error.localizedDescription)")
+        }
+    }
+
+    func stopMonitoring() {
+        audioEngine?.stop()
+        inputNode?.removeTap(onBus: 0)
+        audioEngine = nil
+        inputNode = nil
+        mixerNode = nil
+    }
+}
+
+extension RecordingViewModel: AVAudioRecorderDelegate, AVAudioPlayerDelegate {
+    // ここにデリゲートメソッドを追加
 }
