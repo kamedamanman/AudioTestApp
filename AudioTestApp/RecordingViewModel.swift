@@ -1,10 +1,10 @@
-import Foundation
 import AVFoundation
+import Foundation
 
 class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudioPlayerDelegate {
     @Published var recordings: [URL] = []
     @Published var isRecording = false
-    @Published var currentlyPlaying: URL? = nil
+    @Published var currentlyPlaying: URL?
 
     var audioRecorder: AVAudioRecorder?
     var audioPlayer: AVAudioPlayer?
@@ -28,7 +28,7 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
 
     func startRecording() {
         let audioSession = AVAudioSession.sharedInstance()
-        
+
         do {
             try audioSession.setCategory(.playAndRecord, mode: .default)
             try audioSession.setActive(true)
@@ -103,27 +103,30 @@ class RecordingViewModel: NSObject, ObservableObject, AVAudioRecorderDelegate, A
     }
 
     func isPlaying(_ recording: URL) -> Bool {
-        return currentlyPlaying == recording
+        currentlyPlaying == recording
     }
 
     // 再生が終了したときに呼ばれるデリゲートメソッド
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    func audioPlayerDidFinishPlaying(_: AVAudioPlayer, successfully _: Bool) {
         currentlyPlaying = nil
         // 画面の更新をトリガーするためにリストを再読み込み
         objectWillChange.send()
     }
 
-    func deleteRecording(_ recording: URL) {
+    func deleteRecording(at offsets: IndexSet) {
         let fileManager = FileManager.default
-        do {
-            if isPlaying(recording) {
-                stopPlayback()
+        for index in offsets {
+            let recording = recordings[index]
+            do {
+                if isPlaying(recording) {
+                    stopPlayback()
+                }
+                try fileManager.removeItem(at: recording)
+            } catch {
+                // 録音の削除に失敗した場合のエラーハンドリング
+                print("録音の削除に失敗しました: \(error.localizedDescription)")
             }
-            try fileManager.removeItem(at: recording)
-            loadRecordings()
-        } catch {
-            // 録音の削除に失敗した場合のエラーハンドリング
-            print("録音の削除に失敗しました: \(error.localizedDescription)")
         }
+        loadRecordings()
     }
 }

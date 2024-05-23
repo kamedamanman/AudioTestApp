@@ -1,0 +1,25 @@
+# .swiftlint.yml
+
+disabled_rules:
+  - line_length
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - implicit_return
+  - closure_end_indentation
+
+included:
+  - AudioTestApp
+
+excluded:
+  - Carthage
+  - Pods
+
+custom_rules:
+  force_try:
+    name: "Force Try"
+    regex: "try!"
+    message: "Avoid using force try."
+    severity: error
